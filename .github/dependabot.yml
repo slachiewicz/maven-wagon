@@ -1,0 +1,27 @@
+version: 2
+updates:
+- package-ecosystem: maven
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "04:00"
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: org.apache.jackrabbit:jackrabbit-webdav
+    versions:
+    - 2.21.5
+  - dependency-name: junit:junit
+    versions:
+    - 4.13.1
+  - dependency-name: org.easymock:easymock
+    versions:
+    - "4.2"
+  - dependency-name: org.slf4j:jcl-over-slf4j
+    versions:
+    - 1.7.26
+  - dependency-name: org.slf4j:slf4j-simple
+    versions:
+    - 1.7.26
+  - dependency-name: org.slf4j:slf4j-api
+    versions:
+    - 1.7.26
