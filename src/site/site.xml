@@ -33,6 +33,10 @@ under the License.
       <item name="Download" href="download.html"/>
     </menu>
 
+    <menu name="Developers">
+      <item name="Development and Testing Guide" href="wagon-development-testing-guide.html"/>
+    </menu>
+
     <menu ref="modules" />
     <menu ref="reports" />
   </body>

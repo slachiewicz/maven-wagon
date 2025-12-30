@@ -1,0 +1,401 @@
+ ------
+ Wagon Development and Testing Guide
+ ------
+ ------
+ 2025-01-01
+ ------
+
+ ~~ Licensed to the Apache Software Foundation (ASF) under one
+ ~~ or more contributor license agreements.  See the NOTICE file
+ ~~ distributed with this work for additional information
+ ~~ regarding copyright ownership.  The ASF licenses this file
+ ~~ to you under the Apache License, Version 2.0 (the
+ ~~ "License"); you may not use this file except in compliance
+ ~~ with the License.  You may obtain a copy of the License at
+ ~~
+ ~~   http://www.apache.org/licenses/LICENSE-2.0
+ ~~
+ ~~ Unless required by applicable law or agreed to in writing,
+ ~~ software distributed under the License is distributed on an
+ ~~ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ~~ KIND, either express or implied.  See the License for the
+ ~~ specific language governing permissions and limitations
+ ~~ under the License.
+
+ ~~ NOTE: For help with the syntax of this file, see:
+ ~~ http://maven.apache.org/doxia/references/apt-format.html
+
+Wagon Development and Testing Guide
+
+ This guide describes how to develop custom Wagon providers and how to test them
+ using the provided testing framework.
+
+* Overview
+
+ Maven Wagon is a transport abstraction used in Maven's artifact and repository handling.
+ A Wagon provider implements a specific protocol (such as HTTP, FTP, SSH, or File) to
+ transfer artifacts between Maven and remote repositories.
+
+* Developing a Custom Wagon
+
+** Understanding the Wagon Interface
+
+ All Wagon providers must implement the <<<org.apache.maven.wagon.Wagon>>> interface,
+ which defines the core methods for repository interaction:
+
+  * <<<get(String resourceName, File destination)>>> - Download a resource from the repository
+
+  * <<<getIfNewer(String resourceName, File destination, long timestamp)>>> - Download only if modified
+
+  * <<<put(File source, String destination)>>> - Upload a file to the repository
+
+  * <<<putDirectory(File sourceDirectory, String destinationDirectory)>>> - Upload a directory
+
+  * <<<resourceExists(String resourceName)>>> - Check if a resource exists
+
+  * <<<getFileList(String destinationDirectory)>>> - List directory contents
+
+  * <<<connect(Repository repository, AuthenticationInfo authenticationInfo)>>> - Establish connection
+
+  * <<<disconnect()>>> - Close connection
+
+** Choosing a Base Class
+
+ Maven Wagon provides two abstract base classes to simplify development:
+
+  * <<<AbstractWagon>>> - Base class for all wagon implementations
+
+  * <<<StreamingWagon>>> - Extended base class for stream-based protocols (HTTP, FTP, etc.)
+
+ Most implementations should extend <<<StreamingWagon>>> as it provides convenience methods
+ for streaming data and simplifies the implementation.
+
+** Implementation Steps
+
+  [[1]] Create a new Maven module for your wagon provider
+
+  [[2]] Add dependencies on <<<wagon-provider-api>>> and <<<wagon-provider-test>>>:
+
++---+
+<dependencies>
+  <dependency>
+    <groupId>org.apache.maven.wagon</groupId>
+    <artifactId>wagon-provider-api</artifactId>
+    <version>${project.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>org.apache.maven.wagon</groupId>
+    <artifactId>wagon-provider-test</artifactId>
+    <version>${project.version}</version>
+    <scope>test</scope>
+  </dependency>
+</dependencies>
++---+
+
+  [[3]] Create your wagon implementation class extending <<<StreamingWagon>>> or <<<AbstractWagon>>>
+
+  [[4]] Implement the required abstract methods:
+
+    * <<<closeConnection()>>> - Clean up connection resources
+
+    * <<<openConnectionInternal()>>> - Initialize the connection
+
+    * <<<fillInputData(InputData inputData)>>> - Prepare to read from remote resource (StreamingWagon)
+
+    * <<<fillOutputData(OutputData outputData)>>> - Prepare to write to remote resource (StreamingWagon)
+
+  [[5]] Create a Plexus component descriptor or use annotations to register your wagon
+
+** Example Implementation
+
++---+
+package org.example.wagon;
+
+import org.apache.maven.wagon.StreamingWagon;
+import org.apache.maven.wagon.resource.Resource;
+
+public class MyCustomWagon extends StreamingWagon {
+    
+    @Override
+    protected void openConnectionInternal() throws ConnectionException {
+        // Initialize connection to remote repository
+        // Example: establish socket connection, authenticate, etc.
+    }
+    
+    @Override
+    protected void closeConnection() throws ConnectionException {
+        // Close connection and clean up resources
+        // Example: close sockets, release handles, etc.
+    }
+    
+    @Override
+    public void fillInputData(InputData inputData) 
+            throws TransferFailedException, ResourceDoesNotExistException {
+        Resource resource = inputData.getResource();
+        // Set up InputStream to read from remote resource
+        // inputData.setInputStream(yourInputStream);
+    }
+    
+    @Override
+    public void fillOutputData(OutputData outputData) 
+            throws TransferFailedException {
+        Resource resource = outputData.getResource();
+        // Set up OutputStream to write to remote resource
+        // outputData.setOutputStream(yourOutputStream);
+    }
+}
++---+
+
+* Testing Your Wagon with WagonTestCase
+
+** Overview of WagonTestCase
+
+ The <<<org.apache.maven.wagon.WagonTestCase>>> class provides a comprehensive test
+ suite for Wagon implementations. It extends <<<PlexusTestCase>>> and includes tests for:
+
+  * File upload and download (round-trip testing)
+
+  * Conditional downloads (getIfNewer)
+
+  * Directory operations
+
+  * File listing
+
+  * Resource existence checking
+
+  * Error handling
+
+** Creating a Test Class
+
+ To test your wagon implementation, create a test class that extends either
+ <<<WagonTestCase>>> or <<<StreamingWagonTestCase>>>:
+
++---+
+package org.example.wagon;
+
+import org.apache.maven.wagon.StreamingWagonTestCase;
+import java.io.File;
+import java.io.IOException;
+
+public class MyCustomWagonTest extends StreamingWagonTestCase {
+    
+    @Override
+    protected String getProtocol() {
+        // Return the protocol identifier for your wagon
+        return "mycustom";
+    }
+    
+    @Override
+    protected String getTestRepositoryUrl() throws IOException {
+        // Return the test repository URL
+        // This should point to a test server or temporary directory
+        return "mycustom://localhost:8080/test-repo";
+    }
+}
++---+
+
+** Required Methods
+
+ Your test class must implement two abstract methods:
+
+  * <<<getProtocol()>>> - Returns the protocol identifier (e.g., "http", "ftp", "file")
+
+  * <<<getTestRepositoryUrl()>>> - Returns the URL of the test repository
+
+** Optional Methods to Override
+
+ You can override these methods to customize test behavior:
+
+  * <<<getAuthInfo()>>> - Provide authentication credentials for testing
+
+  * <<<getPermissions()>>> - Define repository permissions to test
+
+  * <<<setupWagonTestingFixtures()>>> - Set up test environment (e.g., start test server)
+
+  * <<<tearDownWagonTestingFixtures()>>> - Clean up test environment (e.g., stop test server)
+
+  * <<<supportsGetIfNewer()>>> - Return false if your wagon doesn't support conditional downloads
+
+  * <<<getExpectedLastModifiedOnGet()>>> - Customize expected modification time for validation
+
+** Example Test Implementation
+
++---+
+public class MyCustomWagonTest extends StreamingWagonTestCase {
+    
+    private MyTestServer testServer;
+    
+    @Override
+    protected String getProtocol() {
+        return "mycustom";
+    }
+    
+    @Override
+    protected String getTestRepositoryUrl() throws IOException {
+        return "mycustom://localhost:" + testServer.getPort() + "/repo";
+    }
+    
+    @Override
+    protected void setupWagonTestingFixtures() throws Exception {
+        // Start test server before running tests
+        testServer = new MyTestServer();
+        testServer.start();
+    }
+    
+    @Override
+    protected void tearDownWagonTestingFixtures() throws Exception {
+        // Stop test server after tests complete
+        if (testServer != null) {
+            testServer.stop();
+        }
+    }
+    
+    @Override
+    protected AuthenticationInfo getAuthInfo() {
+        AuthenticationInfo authInfo = new AuthenticationInfo();
+        authInfo.setUserName("testuser");
+        authInfo.setPassword("testpass");
+        return authInfo;
+    }
+}
++---+
+
+** Test Methods Provided by WagonTestCase
+
+ When you extend <<<WagonTestCase>>>, your test class automatically inherits these test methods:
+
+  * <<<testWagon()>>> - Basic file round-trip test (upload and download)
+
+  * <<<testWagonGetIfNewerIsNewer()>>> - Test conditional download with newer timestamp
+
+  * <<<testWagonGetIfNewerIsSame()>>> - Test conditional download with same timestamp
+
+  * <<<testWagonGetIfNewerIsOlder()>>> - Test conditional download with older timestamp
+
+  * <<<testWagonPutDirectory()>>> - Test directory upload
+
+  * <<<testWagonPutDirectoryDeepDestination()>>> - Test nested directory creation
+
+  * <<<testWagonPutDirectoryWhenDirectoryAlreadyExists()>>> - Test merging directories
+
+  * <<<testWagonPutDirectoryForDot()>>> - Test uploading to root directory
+
+  * <<<testFailedGet()>>> - Test error handling for non-existent resources
+
+  * <<<testFailedGetIfNewer()>>> - Test conditional download error handling
+
+  * <<<testWagonGetFileList()>>> - Test directory listing
+
+  * <<<testWagonGetFileListWhenDirectoryDoesNotExist()>>> - Test listing non-existent directory
+
+  * <<<testWagonResourceExists()>>> - Test resource existence check (positive case)
+
+  * <<<testWagonResourceNotExists()>>> - Test resource existence check (negative case)
+
+** StreamingWagonTestCase Additional Tests
+
+ If you extend <<<StreamingWagonTestCase>>>, you also get these tests:
+
+  * <<<testStreamingWagon()>>> - Test streaming upload and download
+
+  * <<<testFailedGetToStream()>>> - Test streaming error handling
+
+  * <<<testWagonGetIfNewerToStreamIsNewer()>>> - Test conditional streaming download
+
+  * <<<testWagonGetIfNewerToStreamIsOlder()>>> - Test conditional streaming download with old timestamp
+
+** Running Tests
+
+ Run the tests using Maven:
+
++---+
+mvn test
++---+
+
+ To run specific tests:
+
++---+
+mvn test -Dtest=MyCustomWagonTest
++---+
+
+** Test Utilities
+
+ <<<WagonTestCase>>> provides several utility methods:
+
+  * <<<getWagon()>>> - Obtains an instance of your wagon from the Plexus container
+
+  * <<<connectWagon(Wagon wagon)>>> - Connects the wagon with test authentication
+
+  * <<<disconnectWagon(Wagon wagon)>>> - Disconnects the wagon and removes listeners
+
+  * <<<putFile()>>> - Uploads a test file to the repository
+
+  * <<<getFile(int expectedSize)>>> - Downloads a file and verifies the size
+
+  * <<<assertResourcesAreInRemoteSide()>>> - Verifies multiple resources exist remotely
+
+  * <<<assertNotExists()>>> - Verifies a resource does not exist
+
+* Best Practices
+
+** Development
+
+  * Always extend <<<StreamingWagon>>> for network-based protocols
+
+  * Implement proper connection management and resource cleanup
+
+  * Add appropriate transfer listeners for progress reporting
+
+  * Handle authentication and authorization correctly
+
+  * Support timeout configuration
+
+  * Implement proper error handling and meaningful exceptions
+
+** Testing
+
+  * Use embedded or mock servers for testing when possible
+
+  * Test both positive and negative scenarios
+
+  * Verify checksums to ensure data integrity
+
+  * Test with different file sizes (small, medium, large)
+
+  * Test authentication and authorization scenarios
+
+  * Clean up test fixtures properly in tearDown methods
+
+  * Consider thread safety if your wagon supports concurrent operations
+
+* Troubleshooting
+
+** Tests Failing with Connection Issues
+
+ Ensure your test server is properly started in <<<setupWagonTestingFixtures()>>>
+ and stopped in <<<tearDownWagonTestingFixtures()>>>.
+
+** Checksum Mismatches
+
+ Verify that your <<<fillInputData()>>> and <<<fillOutputData()>>> methods properly
+ handle the input/output streams without corrupting data.
+
+** Timeout Issues
+
+ Override timeout-related methods in your wagon implementation and ensure reasonable
+ default values for tests.
+
+** Resource Not Found Errors
+
+ Make sure your <<<getTestRepositoryUrl()>>> returns a valid URL and the test repository
+ is properly initialized.
+
+* Additional Resources
+
+  * {{{./wagon-provider-api/}Wagon Provider API}}
+
+  * {{{./wagon-provider-test/}Wagon Provider Test}}
+
+  * {{{./wagon-providers/}Existing Wagon Providers}} for reference implementations
+
+  * {{{https://maven.apache.org/guides/development/guide-maven-development.html}Maven Development Guide}}
