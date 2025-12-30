@@ -1,0 +1,326 @@
+  ------
+  Guide for the Impatient Programmer
+  ------
+  ------
+  ------
+
+Guide for the Impatient Programmer
+
+  This guide provides a quick introduction to using Maven Wagon for transferring files 
+  using the simple POJO facade.
+
+* Quick Start
+
+  Maven Wagon provides a simple API for uploading and downloading files from various 
+  repositories. Here's what you need to know to get started quickly.
+
+** Basic Download Example
+
+  Download a file from a repository:
+
++---+
+import org.apache.maven.wagon.Wagon;
+import org.apache.maven.wagon.repository.Repository;
+import org.apache.maven.wagon.providers.file.FileWagon;
+import java.io.File;
+
+// Create a wagon instance
+Wagon wagon = new FileWagon();
+
+// Create a repository
+Repository repository = new Repository("myRepo", "file:///path/to/repository");
+
+// Connect to the repository
+wagon.connect(repository);
+
+// Download a file
+wagon.get("path/to/resource.txt", new File("local-resource.txt"));
+
+// Disconnect
+wagon.disconnect();
++---+
+
+** Basic Upload Example
+
+  Upload a file to a repository:
+
++---+
+import org.apache.maven.wagon.Wagon;
+import org.apache.maven.wagon.repository.Repository;
+import org.apache.maven.wagon.providers.file.FileWagon;
+import java.io.File;
+
+Wagon wagon = new FileWagon();
+Repository repository = new Repository("myRepo", "file:///path/to/repository");
+
+wagon.connect(repository);
+
+// Upload a file
+wagon.put(new File("local-file.txt"), "path/to/destination.txt");
+
+wagon.disconnect();
++---+
+
+** Using Authentication
+
+  For repositories requiring authentication:
+
++---+
+import org.apache.maven.wagon.Wagon;
+import org.apache.maven.wagon.repository.Repository;
+import org.apache.maven.wagon.authentication.AuthenticationInfo;
+import org.apache.maven.wagon.providers.http.HttpWagon;
+
+Wagon wagon = new HttpWagon();
+Repository repository = new Repository("myRepo", "http://example.com/repository");
+
+// Setup authentication
+AuthenticationInfo authInfo = new AuthenticationInfo();
+authInfo.setUserName("username");
+authInfo.setPassword("password");
+
+wagon.connect(repository, authInfo);
+
+wagon.get("artifact.jar", new File("local-artifact.jar"));
+
+wagon.disconnect();
++---+
+
+** Using a Proxy
+
+  Connect through a proxy server:
+
++---+
+import org.apache.maven.wagon.Wagon;
+import org.apache.maven.wagon.repository.Repository;
+import org.apache.maven.wagon.proxy.ProxyInfo;
+import org.apache.maven.wagon.providers.http.HttpWagon;
+
+Wagon wagon = new HttpWagon();
+Repository repository = new Repository("myRepo", "http://example.com/repository");
+
+// Setup proxy
+ProxyInfo proxyInfo = new ProxyInfo();
+proxyInfo.setHost("proxy.example.com");
+proxyInfo.setPort(8080);
+proxyInfo.setUserName("proxyuser");
+proxyInfo.setPassword("proxypass");
+
+wagon.connect(repository, proxyInfo);
+
+wagon.get("resource.txt", new File("local-resource.txt"));
+
+wagon.disconnect();
++---+
+
+* Common Operations
+
+** Check if a Resource Exists
+
++---+
+wagon.connect(repository);
+
+if (wagon.resourceExists("path/to/resource.txt")) {
+    System.out.println("Resource exists!");
+}
+
+wagon.disconnect();
++---+
+
+** List Files in a Directory
+
++---+
+wagon.connect(repository);
+
+List<String> files = wagon.getFileList("path/to/directory");
+for (String file : files) {
+    System.out.println(file);
+}
+
+wagon.disconnect();
++---+
+
+** Download Only If Newer
+
++---+
+wagon.connect(repository);
+
+File localFile = new File("local-resource.txt");
+long timestamp = localFile.lastModified();
+
+boolean downloaded = wagon.getIfNewer("remote-resource.txt", localFile, timestamp);
+if (downloaded) {
+    System.out.println("Downloaded newer version");
+} else {
+    System.out.println("Local version is up to date");
+}
+
+wagon.disconnect();
++---+
+
+** Upload a Directory
+
++---+
+wagon.connect(repository);
+
+if (wagon.supportsDirectoryCopy()) {
+    wagon.putDirectory(new File("local/directory"), "remote/directory");
+} else {
+    System.out.println("This wagon does not support directory operations");
+}
+
+wagon.disconnect();
++---+
+
+* Available Wagon Providers
+
+  Different wagon implementations for different protocols:
+
+*-----------------+-------------------------+----------------------------------+
+| Protocol        | Wagon Class             | Example URL                      |
+*-----------------+-------------------------+----------------------------------+
+| File            | FileWagon               | file:///path/to/repo             |
+*-----------------+-------------------------+----------------------------------+
+| HTTP/HTTPS      | HttpWagon               | http://example.com/repo          |
+*-----------------+-------------------------+----------------------------------+
+| FTP             | FtpWagon                | ftp://ftp.example.com/repo       |
+*-----------------+-------------------------+----------------------------------+
+| SSH/SCP         | ScpWagon                | scp://example.com/path/to/repo   |
+*-----------------+-------------------------+----------------------------------+
+| WebDAV          | WebDavWagon             | dav:http://example.com/repo      |
+*-----------------+-------------------------+----------------------------------+
+
+* Error Handling
+
+  Always handle exceptions properly:
+
++---+
+import org.apache.maven.wagon.ConnectionException;
+import org.apache.maven.wagon.AuthenticationException;
+import org.apache.maven.wagon.TransferFailedException;
+import org.apache.maven.wagon.ResourceDoesNotExistException;
+import org.apache.maven.wagon.AuthorizationException;
+
+try {
+    wagon.connect(repository);
+    wagon.get("resource.txt", new File("local-resource.txt"));
+} catch (ConnectionException e) {
+    System.err.println("Failed to connect: " + e.getMessage());
+} catch (AuthenticationException e) {
+    System.err.println("Authentication failed: " + e.getMessage());
+} catch (TransferFailedException e) {
+    System.err.println("Transfer failed: " + e.getMessage());
+} catch (ResourceDoesNotExistException e) {
+    System.err.println("Resource not found: " + e.getMessage());
+} catch (AuthorizationException e) {
+    System.err.println("Not authorized: " + e.getMessage());
+} finally {
+    try {
+        wagon.disconnect();
+    } catch (ConnectionException e) {
+        System.err.println("Failed to disconnect: " + e.getMessage());
+    }
+}
++---+
+
+* Setting Timeouts
+
+  Configure connection and read timeouts:
+
++---+
+Wagon wagon = new HttpWagon();
+
+// Set connection timeout to 30 seconds
+wagon.setTimeout(30000);
+
+// Set read timeout to 60 seconds
+wagon.setReadTimeout(60000);
+
+Repository repository = new Repository("myRepo", "http://example.com/repository");
+wagon.connect(repository);
++---+
+
+* Adding Listeners
+
+  Monitor transfer progress:
+
++---+
+import org.apache.maven.wagon.events.TransferListener;
+import org.apache.maven.wagon.events.TransferEvent;
+
+wagon.addTransferListener(new TransferListener() {
+    public void transferInitiated(TransferEvent event) {
+        System.out.println("Transfer initiated: " + event.getResource().getName());
+    }
+    
+    public void transferStarted(TransferEvent event) {
+        System.out.println("Transfer started");
+    }
+    
+    public void transferProgress(TransferEvent event, byte[] buffer, int length) {
+        // Called during transfer
+    }
+    
+    public void transferCompleted(TransferEvent event) {
+        System.out.println("Transfer completed");
+    }
+    
+    public void transferError(TransferEvent event) {
+        System.err.println("Transfer error");
+    }
+    
+    public void debug(String message) {
+        System.out.println("DEBUG: " + message);
+    }
+});
+
+wagon.connect(repository);
+wagon.get("resource.txt", new File("local-resource.txt"));
+wagon.disconnect();
++---+
+
+* Maven Dependency
+
+  To use Maven Wagon in your project, add this dependency:
+
++---+
+<dependency>
+    <groupId>org.apache.maven.wagon</groupId>
+    <artifactId>wagon-provider-api</artifactId>
+    <version>${project.version}</version>
+</dependency>
+
+<!-- For HTTP support -->
+<dependency>
+    <groupId>org.apache.maven.wagon</groupId>
+    <artifactId>wagon-http</artifactId>
+    <version>${project.version}</version>
+</dependency>
+
+<!-- For file support -->
+<dependency>
+    <groupId>org.apache.maven.wagon</groupId>
+    <artifactId>wagon-file</artifactId>
+    <version>${project.version}</version>
+</dependency>
++---+
+
+* Summary
+
+  That's all you need to get started with Maven Wagon! The key points:
+
+  * Create a Wagon instance (FileWagon, HttpWagon, etc.)
+
+  * Create a Repository with an ID and URL
+
+  * Connect to the repository (optionally with authentication/proxy)
+
+  * Use get() to download or put() to upload files
+
+  * Always disconnect() when done
+
+  * Handle exceptions appropriately
+
+  []
+
+  For more detailed information, see the {{{./wagon-provider-api/}API documentation}}.
